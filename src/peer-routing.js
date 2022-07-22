@@ -2,14 +2,14 @@
 
 const debug = require('debug')
 const log = Object.assign(debug('libp2p:peer-routing'), {
-  error: debug('libp2p:peer-routing:err')
+  error: debug('libp2p:peer-routing:err'),
 })
 const errCode = require('err-code')
 const errors = require('./errors')
 const {
   storeAddresses,
   uniquePeers,
-  requirePeers
+  requirePeers,
 } = require('./content-routing/utils')
 const { TimeoutController } = require('timeout-abort-controller')
 
@@ -20,11 +20,10 @@ const drain = require('it-drain')
 const filter = require('it-filter')
 const {
   setDelayedInterval,
-  clearDelayedInterval
-// @ts-ignore module with no types
+  clearDelayedInterval,
+  // @ts-ignore module with no types
 } = require('set-delayed-interval')
 const { DHTPeerRouting } = require('./dht/dht-peer-routing')
-// @ts-expect-error setMaxListeners is missing from the types
 const { setMaxListeners } = require('events')
 
 /**
@@ -49,7 +48,7 @@ class PeerRouting {
    * @class
    * @param {import('./')} libp2p
    */
-  constructor (libp2p) {
+  constructor(libp2p) {
     this._peerId = libp2p.peerId
     this._peerStore = libp2p.peerStore
     /** @type {PeerRoutingModule[]} */
@@ -68,23 +67,33 @@ class PeerRouting {
   /**
    * Start peer routing service.
    */
-  start () {
-    if (!this._routers.length || this._timeoutId || !this._refreshManagerOptions.enabled) {
+  start() {
+    if (
+      !this._routers.length ||
+      this._timeoutId ||
+      !this._refreshManagerOptions.enabled
+    ) {
       return
     }
 
     this._timeoutId = setDelayedInterval(
-      this._findClosestPeersTask, this._refreshManagerOptions.interval, this._refreshManagerOptions.bootDelay
+      this._findClosestPeersTask,
+      this._refreshManagerOptions.interval,
+      this._refreshManagerOptions.bootDelay
     )
   }
 
   /**
    * Recurrent task to find closest peers and add their addresses to the Address Book.
    */
-  async _findClosestPeersTask () {
+  async _findClosestPeersTask() {
     try {
       // nb getClosestPeers adds the addresses to the address book
-      await drain(this.getClosestPeers(this._peerId.id, { timeout: this._refreshManagerOptions.timeout || 10e3 }))
+      await drain(
+        this.getClosestPeers(this._peerId.id, {
+          timeout: this._refreshManagerOptions.timeout || 10e3,
+        })
+      )
     } catch (/** @type {any} */ err) {
       log.error(err)
     }
@@ -93,7 +102,7 @@ class PeerRouting {
   /**
    * Stop peer routing service.
    */
-  stop () {
+  stop() {
     clearDelayedInterval(this._timeoutId)
   }
 
@@ -105,24 +114,33 @@ class PeerRouting {
    * @param {number} [options.timeout] - How long the query should run
    * @returns {Promise<{ id: PeerId, multiaddrs: Multiaddr[] }>}
    */
-  async findPeer (id, options) { // eslint-disable-line require-await
+  async findPeer(id, options) {
+    // eslint-disable-line require-await
     if (!this._routers.length) {
-      throw errCode(new Error('No peer routers available'), errors.codes.ERR_NO_ROUTERS_AVAILABLE)
+      throw errCode(
+        new Error('No peer routers available'),
+        errors.codes.ERR_NO_ROUTERS_AVAILABLE
+      )
     }
 
     if (id.toB58String() === this._peerId.toB58String()) {
-      throw errCode(new Error('Should not try to find self'), errors.codes.ERR_FIND_SELF)
+      throw errCode(
+        new Error('Should not try to find self'),
+        errors.codes.ERR_FIND_SELF
+      )
     }
 
     const output = await pipe(
       merge(
-        ...this._routers.map(router => (async function * () {
-          try {
-            yield await router.findPeer(id, options)
-          } catch (err) {
-            log.error(err)
-          }
-        })())
+        ...this._routers.map((router) =>
+          (async function* () {
+            try {
+              yield await router.findPeer(id, options)
+            } catch (err) {
+              log.error(err)
+            }
+          })()
+        )
       ),
       (source) => filter(source, Boolean),
       (source) => storeAddresses(source, this._peerStore),
@@ -133,7 +151,10 @@ class PeerRouting {
       return output
     }
 
-    throw errCode(new Error(errors.messages.NOT_FOUND), errors.codes.ERR_NOT_FOUND)
+    throw errCode(
+      new Error(errors.messages.NOT_FOUND),
+      errors.codes.ERR_NOT_FOUND
+    )
   }
 
   /**
@@ -145,9 +166,12 @@ class PeerRouting {
    * @param {AbortSignal} [options.signal] - An AbortSignal to abort the request
    * @returns {AsyncIterable<{ id: PeerId, multiaddrs: Multiaddr[] }>}
    */
-  async * getClosestPeers (key, options = { timeout: 30e3 }) {
+  async *getClosestPeers(key, options = { timeout: 30e3 }) {
     if (!this._routers.length) {
-      throw errCode(new Error('No peer routers available'), errors.codes.ERR_NO_ROUTERS_AVAILABLE)
+      throw errCode(
+        new Error('No peer routers available'),
+        errors.codes.ERR_NO_ROUTERS_AVAILABLE
+      )
     }
 
     if (options.timeout) {
@@ -159,9 +183,9 @@ class PeerRouting {
       options.signal = controller.signal
     }
 
-    yield * pipe(
+    yield* pipe(
       merge(
-        ...this._routers.map(router => router.getClosestPeers(key, options))
+        ...this._routers.map((router) => router.getClosestPeers(key, options))
       ),
       (source) => storeAddresses(source, this._peerStore),
       (source) => uniquePeers(source),

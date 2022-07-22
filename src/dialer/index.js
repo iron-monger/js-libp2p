@@ -2,14 +2,13 @@
 
 const debug = require('debug')
 const log = Object.assign(debug('libp2p:dialer'), {
-  error: debug('libp2p:dialer:err')
+  error: debug('libp2p:dialer:err'),
 })
 const errCode = require('err-code')
 const { Multiaddr } = require('multiaddr')
 const { TimeoutController } = require('timeout-abort-controller')
 const { AbortError } = require('abortable-iterator')
 const { anySignal } = require('any-signal')
-// @ts-expect-error setMaxListeners is missing from the types
 const { setMaxListeners } = require('events')
 const DialRequest = require('./dial-request')
 const { publicAddressesFirst } = require('libp2p-utils/src/address-sort')
@@ -20,7 +19,7 @@ const {
   DIAL_TIMEOUT,
   MAX_PARALLEL_DIALS,
   MAX_PER_PEER_DIALS,
-  MAX_ADDRS_TO_DIAL
+  MAX_ADDRS_TO_DIAL,
 } = require('../constants')
 
 const METRICS_COMPONENT = 'dialler'
@@ -67,7 +66,7 @@ class Dialer {
    * @class
    * @param {DialerProperties & DialerOptions} options
    */
-  constructor ({
+  constructor({
     transportManager,
     peerStore,
     addressSorter = publicAddressesFirst,
@@ -76,7 +75,7 @@ class Dialer {
     dialTimeout = DIAL_TIMEOUT,
     maxDialsPerPeer = MAX_PER_PEER_DIALS,
     resolvers = {},
-    metrics
+    metrics,
   }) {
     this.transportManager = transportManager
     this.peerStore = peerStore
@@ -88,10 +87,18 @@ class Dialer {
     this.tokens = [...new Array(maxParallelDials)].map((_, index) => index)
 
     /** @type {Map<string, PendingDial>} */
-    this._pendingDials = trackedMap(METRICS_COMPONENT, METRICS_PENDING_DIALS, metrics)
+    this._pendingDials = trackedMap(
+      METRICS_COMPONENT,
+      METRICS_PENDING_DIALS,
+      metrics
+    )
 
     /** @type {Map<string, { resolve: (value: any) => void, reject: (err: Error) => void}>} */
-    this._pendingDialTargets = trackedMap(METRICS_COMPONENT, METRICS_PENDING_DIAL_TARGETS, metrics)
+    this._pendingDialTargets = trackedMap(
+      METRICS_COMPONENT,
+      METRICS_PENDING_DIAL_TARGETS,
+      metrics
+    )
 
     for (const [key, value] of Object.entries(resolvers)) {
       Multiaddr.resolvers.set(key, value)
@@ -101,7 +108,7 @@ class Dialer {
   /**
    * Clears any pending dials
    */
-  destroy () {
+  destroy() {
     for (const dial of this._pendingDials.values()) {
       try {
         dial.controller.abort()
@@ -127,13 +134,18 @@ class Dialer {
    * @param {AbortSignal} [options.signal] - An AbortController signal
    * @returns {Promise<Connection>}
    */
-  async connectToPeer (peer, options = {}) {
+  async connectToPeer(peer, options = {}) {
     const dialTarget = await this._createCancellableDialTarget(peer)
 
     if (!dialTarget.addrs.length) {
-      throw errCode(new Error('The dial request has no valid addresses'), codes.ERR_NO_VALID_ADDRESSES)
+      throw errCode(
+        new Error('The dial request has no valid addresses'),
+        codes.ERR_NO_VALID_ADDRESSES
+      )
     }
-    const pendingDial = this._pendingDials.get(dialTarget.id) || this._createPendingDial(dialTarget, options)
+    const pendingDial =
+      this._pendingDials.get(dialTarget.id) ||
+      this._createPendingDial(dialTarget, options)
 
     try {
       const connection = await pendingDial.promise
@@ -159,9 +171,11 @@ class Dialer {
    * @param {PeerId|Multiaddr|string} peer - The peer to dial
    * @returns {Promise<DialTarget>}
    */
-  async _createCancellableDialTarget (peer) {
+  async _createCancellableDialTarget(peer) {
     // Make dial target promise cancellable
-    const id = `${(parseInt(String(Math.random() * 1e9), 10)).toString() + Date.now()}`
+    const id = `${
+      parseInt(String(Math.random() * 1e9), 10).toString() + Date.now()
+    }`
     const cancellablePromise = new Promise((resolve, reject) => {
       this._pendingDialTargets.set(id, { resolve, reject })
     })
@@ -169,7 +183,7 @@ class Dialer {
     try {
       const dialTarget = await Promise.race([
         this._createDialTarget(peer),
-        cancellablePromise
+        cancellablePromise,
       ])
 
       return dialTarget
@@ -188,14 +202,16 @@ class Dialer {
    * @param {PeerId|Multiaddr|string} peer - A PeerId or Multiaddr
    * @returns {Promise<DialTarget>}
    */
-  async _createDialTarget (peer) {
+  async _createDialTarget(peer) {
     const { id, multiaddrs } = getPeer(peer)
 
     if (multiaddrs) {
       this.peerStore.addressBook.add(id, multiaddrs)
     }
 
-    let knownAddrs = this.peerStore.addressBook.getMultiaddrsForPeer(id, this.addressSorter) || []
+    let knownAddrs =
+      this.peerStore.addressBook.getMultiaddrsForPeer(id, this.addressSorter) ||
+      []
 
     // If received a multiaddr to dial, it should be the first to use
     // But, if we know other multiaddrs for the peer, we should try them too.
@@ -208,20 +224,25 @@ class Dialer {
     const addrs = []
     for (const a of knownAddrs) {
       const resolvedAddrs = await this._resolve(a)
-      resolvedAddrs.forEach(ra => addrs.push(ra))
+      resolvedAddrs.forEach((ra) => addrs.push(ra))
     }
 
     // Multiaddrs not supported by the available transports will be filtered out.
-    const supportedAddrs = addrs.filter(a => this.transportManager.transportForMultiaddr(a))
+    const supportedAddrs = addrs.filter((a) =>
+      this.transportManager.transportForMultiaddr(a)
+    )
 
     if (supportedAddrs.length > this.maxAddrsToDial) {
       this.peerStore.delete(id)
-      throw errCode(new Error('dial with more addresses than allowed'), codes.ERR_TOO_MANY_ADDRESSES)
+      throw errCode(
+        new Error('dial with more addresses than allowed'),
+        codes.ERR_TOO_MANY_ADDRESSES
+      )
     }
 
     return {
       id: id.toB58String(),
-      addrs: supportedAddrs
+      addrs: supportedAddrs,
     }
   }
 
@@ -234,20 +255,22 @@ class Dialer {
    * @param {AbortSignal} [options.signal] - An AbortController signal
    * @returns {PendingDial}
    */
-  _createPendingDial (dialTarget, options = {}) {
+  _createPendingDial(dialTarget, options = {}) {
     /**
      * @param {Multiaddr} addr
      * @param {{ signal: { aborted: any; }; }} options
      */
     const dialAction = (addr, options) => {
-      if (options.signal.aborted) throw errCode(new Error('already aborted'), codes.ERR_ALREADY_ABORTED)
+      if (options.signal.aborted) {
+        throw errCode(new Error('already aborted'), codes.ERR_ALREADY_ABORTED)
+      }
       return this.transportManager.dial(addr, options)
     }
 
     const dialRequest = new DialRequest({
       addrs: dialTarget.addrs,
       dialAction,
-      dialer: this
+      dialer: this,
     })
 
     // Combine the timeout signal and options.signal, if provided
@@ -268,7 +291,7 @@ class Dialer {
       destroy: () => {
         timeoutController.clear()
         this._pendingDials.delete(dialTarget.id)
-      }
+      },
     }
     this._pendingDials.set(dialTarget.id, pendingDial)
 
@@ -278,17 +301,22 @@ class Dialer {
   /**
    * @param {number} num
    */
-  getTokens (num) {
+  getTokens(num) {
     const total = Math.min(num, this.maxDialsPerPeer, this.tokens.length)
     const tokens = this.tokens.splice(0, total)
-    log('%d tokens request, returning %d, %d remaining', num, total, this.tokens.length)
+    log(
+      '%d tokens request, returning %d, %d remaining',
+      num,
+      total,
+      this.tokens.length
+    )
     return tokens
   }
 
   /**
    * @param {number} token
    */
-  releaseToken (token) {
+  releaseToken(token) {
     // Guard against duplicate releases
     if (this.tokens.indexOf(token) > -1) return
     log('token %d released', token)
@@ -301,7 +329,7 @@ class Dialer {
    * @param {Multiaddr} ma
    * @returns {Promise<Multiaddr[]>}
    */
-  async _resolve (ma) {
+  async _resolve(ma) {
     // TODO: recursive logic should live in multiaddr once dns4/dns6 support is in place
     // Now only supporting resolve for dnsaddr
     const resolvableProto = ma.protoNames().includes('dnsaddr')
@@ -312,17 +340,19 @@ class Dialer {
     }
 
     const resolvedMultiaddrs = await this._resolveRecord(ma)
-    const recursiveMultiaddrs = await Promise.all(resolvedMultiaddrs.map((nm) => {
-      return this._resolve(nm)
-    }))
+    const recursiveMultiaddrs = await Promise.all(
+      resolvedMultiaddrs.map((nm) => {
+        return this._resolve(nm)
+      })
+    )
 
     const addrs = recursiveMultiaddrs.flat()
     return addrs.reduce((array, newM) => {
-      if (!array.find(m => m.equals(newM))) {
+      if (!array.find((m) => m.equals(newM))) {
         array.push(newM)
       }
       return array
-    }, /** @type  {Multiaddr[]} */([]))
+    }, /** @type  {Multiaddr[]} */ ([]))
   }
 
   /**
@@ -331,7 +361,7 @@ class Dialer {
    * @param {Multiaddr} ma
    * @returns {Promise<Multiaddr[]>}
    */
-  async _resolveRecord (ma) {
+  async _resolveRecord(ma) {
     try {
       ma = new Multiaddr(ma.toString()) // Use current multiaddr module
       const multiaddrs = await ma.resolve()

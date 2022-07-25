@@ -87,7 +87,10 @@ class Registrar {
   register (topology) {
     if (!Topology.isTopology(topology)) {
       log.error('topology must be an instance of interfaces/topology')
-      throw errcode(new Error('topology must be an instance of interfaces/topology'), ERR_INVALID_PARAMETERS)
+      throw errcode(
+        new Error('topology must be an instance of interfaces/topology'),
+        ERR_INVALID_PARAMETERS
+      )
     }
 
     // Create topology
@@ -96,6 +99,7 @@ class Registrar {
     this.topologies.set(id, topology)
 
     // Set registrar
+    // @ts-ignore
     topology.registrar = this
 
     return id
